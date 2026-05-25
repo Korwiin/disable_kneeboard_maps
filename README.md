@@ -1,24 +1,20 @@
 # DCS Mod — Disable Kneeboard Map Pages
 
-Suppresses the automatic per-waypoint map page generation built into the DCS kneeboard system.
-
-By default, DCS generates one map page per flight plan waypoint (plus three fixed overview
-pages) using the `avKneeboard` C++ device. This mod no-ops the Lua callbacks that drive that
-pipeline, leaving the kneeboard clear for custom pages only.
+Suppresses all automatic kneeboard page generation built into the DCS kneeboard system,
+leaving the kneeboard clear for custom pages only.
 
 ---
 
 ## What It Disables
 
-| Auto-generated page type           | Source callback           | After mod |
-|------------------------------------|---------------------------|-----------|
-| Per-waypoint map page              | `on_waypoint_adding()`    | Removed   |
-| Fixed overview pages (40/80/160nm) | `generate_maps()`         | Removed   |
-| Per-waypoint text note page        | `note_generate_template`  | Removed   |
+| Auto-generated page type              | Source            | Override file      | After mod |
+|---------------------------------------|-------------------|--------------------|-----------|
+| Per-waypoint map page                 | `avKneeboard` C++ | `device/init.lua`  | Removed   |
+| Fixed overview pages (40/80/160nm)    | `avKneeboard` C++ | `device/init.lua`  | Removed   |
+| Per-waypoint text note page           | `avKneeboard` C++ | `device/init.lua`  | Removed   |
+| Flight plan route overview page       | `ccKneeboard` C++ | `indicator/init.lua` | Removed |
 
-The flight plan overview page defined in `indicator/init.lua` (`pages = {{BASE,MAP,OVERLAY}}`)
-is NOT affected by this mod — that is controlled by the `ccKneeboard` indicator, not the device.
-If you also want to remove that page, see the notes at the bottom of this file.
+Custom pages placed in `Saved Games\DCS\KNEEBOARD\` are not affected and continue to load normally.
 
 ---
 
@@ -43,12 +39,14 @@ It backs up originals before applying and can revert cleanly.
                └── _Common\
                    └── Cockpit\
                        └── KNEEBOARD\
-                           └── device\
+                           ├── device\
+                           │   └── init.lua
+                           └── indicator\
                                └── init.lua
    ```
    The folder structure mirrors the DCS install root — OVGME merges it on top of the game directory.
 
-2. In OVGME, enable **disable_kneeboard_maps**. OVGME backs up the original `init.lua` and replaces it with this mod's version.
+2. In OVGME, enable **disable_kneeboard_maps**. OVGME backs up both original files and replaces them with this mod's versions.
 
 3. Launch DCS. Fly any aircraft and open the kneeboard — waypoint map pages should be absent.
 
@@ -64,25 +62,48 @@ DCS updates overwrite game files, which will silently remove this mod. After eac
 
 ## Alternative: Direct file edit
 
-If you prefer not to use OVGME:
+If you prefer not to use OVGME, edit both files manually in your DCS install.
 
-1. Locate:
-   ```
-   DCS World\Scripts\Aircrafts\_Common\Cockpit\KNEEBOARD\device\init.lua
-   ```
-2. Back it up as `init.lua.original`.
-3. Append these four lines to the **end** of the original file:
+> **Note:** These edits will be lost on every DCS update. OVGME handles that automatically.
+
+### File 1 — `device/init.lua`
+
+```
+DCS World\Scripts\Aircrafts\_Common\Cockpit\KNEEBOARD\device\init.lua
+```
+
+1. Back it up as `init.lua.original`.
+2. Append these four lines to the **end** of the file:
    ```lua
    function on_waypoint_adding(x, z, course) end
    function generate_maps() map_pages = {} end
    note_generate_template     = nil
    number_of_additional_pages = 0
    ```
-4. Save. Relaunch DCS.
+3. Save.
 
-To restore: delete the edited file and rename `init.lua.original` back to `init.lua`.
+### File 2 — `indicator/init.lua`
 
-> **Note:** This edit will be lost on every DCS update. OVGME handles that automatically.
+```
+DCS World\Scripts\Aircrafts\_Common\Cockpit\KNEEBOARD\indicator\init.lua
+```
+
+1. Back it up as `init.lua.original`.
+2. Find this line near the top:
+   ```lua
+   pages = {{BASE,MAP,OVERLAY}}
+   ```
+   Change it to:
+   ```lua
+   pages = {}
+   ```
+3. Find and delete (or comment out) the line immediately after:
+   ```lua
+   GetSelf():Add_Map_Page(MAP,LockOn_Options.common_script_path.."KNEEBOARD/indicator/map_page.lua")
+   ```
+4. Save.
+
+Relaunch DCS. To restore either file: delete the edited version and rename `.original` back to `init.lua`.
 
 ---
 
@@ -115,25 +136,6 @@ paths: `mount_vfs_model_path`, `mount_vfs_texture_path`, `mount_vfs_liveries_pat
 
 OVGME operates at the OS level (file copy/restore) so it can override any game file,
 including cockpit scripts.
-
----
-
-## Removing the Flight Plan Overview Page
-
-The first page in the kneeboard (`pages = {{BASE,MAP,OVERLAY}}` in `indicator/init.lua`)
-is the map overview with the route line drawn by `ccKneeboard` — a separate pipeline from
-`avKneeboard`. This mod includes a second override file that removes it:
-
-```
-Scripts\Aircrafts\_Common\Cockpit\KNEEBOARD\indicator\init.lua
-```
-
-Changes from the original:
-- `pages = {{BASE,MAP,OVERLAY}}` → `pages = {}`
-- `GetSelf():Add_Map_Page(...)` call removed
-
-All other content (page scanner, `scan_path`, viewport configuration) is preserved so
-custom pages in `Saved Games\DCS\KNEEBOARD\` continue to load normally.
 
 ---
 
